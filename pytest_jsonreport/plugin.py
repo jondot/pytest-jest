@@ -284,7 +284,7 @@ class JSONReport:
 class LoggingHandler(logging.Handler):
 
     def __init__(self):
-        super().__init__()
+        super(LoggingHandler,self).__init__()
         self.records = []
 
     def emit(self, record):
