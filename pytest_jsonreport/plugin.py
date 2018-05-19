@@ -6,6 +6,12 @@ import time
 
 import pytest
 
+def merge(source, *tgt):
+    res = source.copy()
+    for t in tgt:
+        res.update(t)
+    return res
+
 
 class JSONReport:
     """The JSON report pytest plugin."""
@@ -20,6 +26,8 @@ class JSONReport:
         self.report_size = 0
         self.logger = logging.getLogger()
 
+
+    
     @property
     def report_file(self):
         return self.config.option.json_report_file or \
@@ -161,7 +169,6 @@ class JSONReport:
                 f,
                 indent=self.config.option.json_report_indent,
             )
-            self.report_size = f.tell()
 
     def json_collector(self, report):
         """Return JSON-serializable collector node."""
@@ -169,11 +176,10 @@ class JSONReport:
             'nodeid': report.nodeid,
             # This is the outcome of the collection, not the test outcome
             'outcome': report.outcome,
-            'children': [{
+            'children': [merge({
                 'nodeid': node.nodeid,
-                'type': node.__class__.__name__,
-                **self.json_location(node),
-            } for node in report.result],
+                'type': node.__class__.__name__
+            }, self.json_location(node)) for node in report.result],
         }
 
     def json_location(self, node):
@@ -190,27 +196,27 @@ class JSONReport:
 
     def json_testitem(self, item):
         """Return JSON-serializable test item."""
-        return {
-            'nodeid': item.nodeid,
+        return merge({'nodeid': item.nodeid},
             # Adding the location in the collector dict *and* here appears
             # redundant, but the docs say they may be different
-            **self.json_location(item),
+            self.json_location(item),
             # item.keywords is actually a dict, but we just save the keys
-            'keywords': list(item.keywords),
+            { 'keywords': list(item.keywords),
             # The outcome will be overridden in case of failure
             'outcome': 'passed',
-        }
+        })
 
     def json_teststage(self, item, report):
         """Return JSON-serializable test stage (setup/call/teardown)."""
-        stage = {
+        stage = merge({
             'duration': report.duration,
             'outcome': report.outcome,
-            **self.json_crash(report),
-            **self.json_traceback(report),
-            **self.json_streams(item, report.when),
-            **self.json_log(item, report.when),
-        }
+            },
+            self.json_crash(report),
+            self.json_traceback(report),
+            self.json_streams(item, report.when),
+            self.json_log(item, report.when))
+        
         if report.longreprtext:
             stage['longrepr'] = report.longreprtext
         return stage
