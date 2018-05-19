@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import json
 import logging
 import time
+import sys
 
 import pytest
 
