@@ -163,6 +163,10 @@ class JSONReport:
 
     def save_report(self, json_report):
         """Save the JSON report to file."""
+        if self.report_file == '/dev/stderr':
+            json.dump(json_report, sys.stderr)
+            return
+        
         with open(self.report_file, 'w') as f:
             json.dump(
                 json_report,
