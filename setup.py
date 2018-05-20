@@ -1,24 +1,21 @@
 from setuptools import setup
 
-
 setup(
-    name='pytest-json-report',
-    description='A pytest plugin to report test results as JSON files',
-    packages=['pytest_jsonreport'],
-    author='numirias',
-    author_email='numirias@users.noreply.github.com',
-    version='0.7.0',
-    url='https://github.com/numirias/pytest-json-report',
+    name='pytest-jest',
+    description='A custom jest-pytest oriented Pytest reporter',
+    packages=['pytest_jest'],
+    author='numirias, jondot',
+    author_email='jondotan@gmail.com',
+    version='0.2.0',
+    url='https://github.com/jondot/pytest-jest',
     license='MIT',
     install_requires=[
         'pytest>=3.3.2',
         'pytest-metadata',
     ],
-    entry_points={
-        'pytest11': [
-            'pytest_jsonreport = pytest_jsonreport.plugin',
-        ]
-    },
+    entry_points={'pytest11': [
+        'pytest_jest = pytest_jest.plugin',
+    ]},
     classifiers=[
         'Development Status :: 4 - Beta',
         'Programming Language :: Python',

@@ -7,6 +7,7 @@ import sys
 
 import pytest
 
+
 def merge(source, *tgt):
     res = source.copy()
     for t in tgt:
@@ -27,26 +28,24 @@ class JSONReport:
         self.report_size = 0
         self.logger = logging.getLogger()
 
-
-    
     @property
     def report_file(self):
-        return self.config.option.json_report_file or \
-               self.config.getini('json_report_file') or \
-               '.report.json'
+        return self.config.option.jest_report_file or \
+               self.config.getini('jest_report_file') or \
+               '.jest-report.json'
 
     @property
     def want_traceback(self):
-        return not self.config.option.json_report_no_traceback and \
+        return not self.config.option.jest_report_no_traceback and \
                self.config.option.tbstyle != 'no'
 
     @property
     def want_streams(self):
-        return not self.config.option.json_report_no_streams
+        return not self.config.option.jest_report_no_streams
 
     @property
     def want_summary(self):
-        return self.config.option.json_report_summary
+        return self.config.option.jest_report_summary
 
     def pytest_configure(self, config):
         # When the plugin is used directly from code, it may have been
@@ -112,6 +111,19 @@ class JSONReport:
             test['outcome'] = outcome
         test[call.when] = self.json_teststage(item, report)
 
+    def try_add_snapshot(self):
+        try:
+            from snapshottest.module import SnapshotModule
+            return {
+                'successful': SnapshotModule.stats_successful_snapshots(),
+                'failed': SnapshotModule.stats_failed_snapshots()[0],
+                'added': SnapshotModule.stats_new_snapshots()[0],
+                'matched': SnapshotModule.stats_visited_snapshots()[0],
+                'unmatched': SnapshotModule.stats_unvisited_snapshots()[0],
+            }
+        except ImportError:
+            return {}
+
     def pytest_sessionfinish(self, session):
         self.add_metadata()
         json_report = {
@@ -121,6 +133,7 @@ class JSONReport:
             'root': str(session.fspath),
             'environment': getattr(self.config, '_metadata', {}),
             'summary': self.json_summary(),
+            'snapshot': self.try_add_snapshot()
         }
         if not self.want_summary:
             json_report['collectors'] = self.collectors
@@ -163,28 +176,22 @@ class JSONReport:
             test['metadata'] = metadata
 
     def save_report(self, json_report):
-        """Save the JSON report to file."""
-        if self.report_file == '/dev/stderr':
-            json.dump(json_report, sys.stderr)
-            return
-        
-        with open(self.report_file, 'w') as f:
-            json.dump(
-                json_report,
-                f,
-                indent=self.config.option.json_report_indent,
-            )
+        json.dump(json_report, sys.stderr)
 
     def json_collector(self, report):
         """Return JSON-serializable collector node."""
         return {
-            'nodeid': report.nodeid,
+            'nodeid':
+            report.nodeid,
             # This is the outcome of the collection, not the test outcome
-            'outcome': report.outcome,
-            'children': [merge({
-                'nodeid': node.nodeid,
-                'type': node.__class__.__name__
-            }, self.json_location(node)) for node in report.result],
+            'outcome':
+            report.outcome,
+            'children': [
+                merge({
+                    'nodeid': node.nodeid,
+                    'type': node.__class__.__name__
+                }, self.json_location(node)) for node in report.result
+            ],
         }
 
     def json_location(self, node):
@@ -201,27 +208,29 @@ class JSONReport:
 
     def json_testitem(self, item):
         """Return JSON-serializable test item."""
-        return merge({'nodeid': item.nodeid},
+        return merge(
+            {
+                'nodeid': item.nodeid
+            },
             # Adding the location in the collector dict *and* here appears
             # redundant, but the docs say they may be different
             self.json_location(item),
             # item.keywords is actually a dict, but we just save the keys
-            { 'keywords': list(item.keywords),
-            # The outcome will be overridden in case of failure
-            'outcome': 'passed',
-        })
+            {
+                'keywords': list(item.keywords),
+                # The outcome will be overridden in case of failure
+                'outcome': 'passed',
+            })
 
     def json_teststage(self, item, report):
         """Return JSON-serializable test stage (setup/call/teardown)."""
         stage = merge({
             'duration': report.duration,
             'outcome': report.outcome,
-            },
-            self.json_crash(report),
-            self.json_traceback(report),
-            self.json_streams(item, report.when),
-            self.json_log(item, report.when))
-        
+        }, self.json_crash(report), self.json_traceback(report),
+                      self.json_streams(item, report.when),
+                      self.json_log(item, report.when))
+
         if report.longreprtext:
             stage['longrepr'] = report.longreprtext
         return stage
@@ -230,8 +239,11 @@ class JSONReport:
         """Return JSON-serializable output of the standard streams."""
         if not self.want_streams:
             return {}
-        return {key: val for when_, key, val in item._report_sections if
-                when_ == when and key in ['stdout', 'stderr']}
+        return {
+            key: val
+            for when_, key, val in item._report_sections
+            if when_ == when and key in ['stdout', 'stderr']
+        }
 
     def json_log(self, item, when):
         try:
@@ -287,9 +299,8 @@ class JSONReport:
 
 
 class LoggingHandler(logging.Handler):
-
     def __init__(self):
-        super(LoggingHandler,self).__init__()
+        super(LoggingHandler, self).__init__()
         self.records = []
 
     def emit(self, record):
@@ -302,7 +313,6 @@ class LoggingHandler(logging.Handler):
 
 
 class Hooks:
-
     def pytest_json_modifyreport(self, json_report):
         """Called after building JSON report and before saving it.
 
@@ -317,29 +327,41 @@ def pytest_addoption(parser):
     summary_help_text = 'just create a summary without per-test details'
     indent_help_text = 'pretty-print JSON with specified indentation level'
     group = parser.getgroup('jsonreport', 'reporting test results as JSON')
-    group.addoption('--json-report', default=False, action='store_true',
-                    help='create JSON report')
-    group.addoption('--json-report-file', help=file_help_text)
-    group.addoption('--json-report-no-traceback', default=False,
-                    action='store_true', help=no_traceback_help_text)
-    group.addoption('--json-report-no-streams', default=False,
-                    action='store_true', help=no_stream_help_text)
-    group.addoption('--json-report-summary', default=False,
-                    action='store_true', help=summary_help_text)
-    group.addoption('--json-report-indent', type=int, help=indent_help_text)
-    parser.addini('json_report_file', file_help_text)
+    group.addoption(
+        '--jest-report',
+        default=False,
+        action='store_true',
+        help='create JSON report')
+    group.addoption('--jest-report-file', help=file_help_text)
+    group.addoption(
+        '--jest-report-no-traceback',
+        default=False,
+        action='store_true',
+        help=no_traceback_help_text)
+    group.addoption(
+        '--jest-report-no-streams',
+        default=False,
+        action='store_true',
+        help=no_stream_help_text)
+    group.addoption(
+        '--jest-report-summary',
+        default=False,
+        action='store_true',
+        help=summary_help_text)
+    group.addoption('--jest-report-indent', type=int, help=indent_help_text)
+    parser.addini('jest_report_file', file_help_text)
 
 
 def pytest_configure(config):
-    if not config.option.json_report:
+    if not config.option.jest_report:
         return
     plugin = JSONReport(config)
-    config._json_report = plugin
+    config._jest_report = plugin
     config.pluginmanager.register(plugin)
 
 
 def pytest_unconfigure(config):
-    plugin = getattr(config, '_json_report', None)
+    plugin = getattr(config, '_jest_report', None)
     if plugin is not None:
-        del config._json_report
+        del config._jest_report
         config.pluginmanager.unregister(plugin)
